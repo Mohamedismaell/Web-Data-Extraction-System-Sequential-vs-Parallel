@@ -24,20 +24,18 @@ class ParallelEngine:
         failed = 0
         total = len(urls)
         
-        # Rate Limiting via asyncio.Semaphore
-        sem = asyncio.Semaphore(10) # Lowered to 10 to drastically reduce connection dropping / timeouts
+        sem = asyncio.Semaphore(10) 
         completed = [0]
         
         async def fetch(url, session):
             if check_cancel and check_cancel(): return None
             
             async with sem:
-                attempts = 4 # Incremented retry attempts
+                attempts = 4
                 for attempt in range(attempts):
                     if check_cancel and check_cancel(): return None
                     try:
                         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-                        # Increased connection timeout securely
                         async with session.get(url, headers=headers, timeout=12) as response:
                             response.raise_for_status()
                             html = await response.text()
@@ -53,7 +51,6 @@ class ParallelEngine:
                             completed[0] += 1
                             if progress_cb: progress_cb(completed[0], total, f"FAILED: {url}")
                             return "FAIL"
-                        # Exponential backoff for parallel traffic jams
                         await asyncio.sleep(1.5 * (attempt + 1)) 
         
         async with aiohttp.ClientSession() as session:

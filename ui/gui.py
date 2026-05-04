@@ -5,258 +5,147 @@ from engines.sequential_engine import SequentialEngine
 from engines.parallel_engine import ParallelEngine
 import os
 
-BACKGROUND = "#282828"
-SURFACE = "#353535"
-SURFACE_ALT = "#404040"
-BORDER = "#4A4A4A"
-ACCENT = "#FFFFFF"
-ACCENT_HOVER = "#E0E0E0"
-SECONDARY = "#3A3A3A"
-SECONDARY_HOVER = "#4A4A4A"
-TEXT = "#E8E8E8"
-MUTED_TEXT = "#B0B0B0"
-ACCENT_TEXT = "#000000"
-SUCCESS = "#55FF55"
-ERROR = "#FF5555"
-CYAN = "#00DDDD"
+BG, SURF, ACCENT, TEXT, MUTED, SUCC, ERR, CYAN = "#282828", "#353535", "#FFFFFF", "#E8E8E8", "#B0B0B0", "#55FF55", "#FF5555", "#00DDDD"
 
 class App:
     def __init__(self, root):
         self.root = root
         self.root.title("Web Data Extractor Pipeline")
-        self.root.geometry("1100x850") 
-        self.root.configure(bg=BACKGROUND)
+        self.root.geometry("1100x800") 
+        self.root.configure(bg=BG)
 
         style = ttk.Style()
         style.theme_use('clam')
-        style.configure('TFrame', background=BACKGROUND)
-        style.configure('Surface.TFrame', background=SURFACE)
-        style.configure('TLabelframe', background=BACKGROUND, foreground=ACCENT, bordercolor=BORDER)
-        style.configure('TLabelframe.Label', background=BACKGROUND, font=("Segoe UI", 11, "bold"), foreground=ACCENT)
-        style.configure('TLabel', background=BACKGROUND, foreground=TEXT, font=("Segoe UI", 11))
-        style.configure('Header.TLabel', font=("Segoe UI", 26, "bold"), foreground=TEXT, background=BACKGROUND)
-        style.configure("Horizontal.TProgressbar", background=ACCENT, troughcolor=SURFACE_ALT, bordercolor=BACKGROUND)
+        for e, bg, fg in [('TFrame', BG, TEXT), ('Surface.TFrame', SURF, TEXT), 
+                          ('TLabelframe', BG, ACCENT), ('TLabelframe.Label', BG, ACCENT)]:
+            style.configure(e, background=bg, foreground=fg)
+        style.configure('TLabel', background=BG, foreground=TEXT, font=("Segoe UI", 11))
+        style.configure("Horizontal.TProgressbar", background=ACCENT, troughcolor=SURF)
 
-        self.container = tk.Frame(self.root, bg=BACKGROUND)
-        self.container.pack(fill="both", expand=True)
+        self.urls, self.stop_flag = [], False
+        self.build_ui()
 
-        self.urls = []
-        self.is_running = False
-        self.stop_flag = False
+    def build_ui(self):
+        main = tk.Frame(self.root, bg=BG)
+        main.pack(fill="both", expand=True, padx=15, pady=15)
         
-        self.create_main_screen()
-        self.create_comparison_screen()
-        self.show_main_screen()
-
-    def create_main_screen(self):
-        self.frame_main = tk.Frame(self.container, bg=BACKGROUND)
-        lbl_title = ttk.Label(self.frame_main, text="Asynchronous Web Data Extractor", style="Header.TLabel")
-        lbl_title.pack(pady=(200, 40))
-        self.btn_start = tk.Button(self.frame_main, text="Initialize Architecture", bg=ACCENT, fg=ACCENT_TEXT, font=("Segoe UI", 16, "bold"), width=30, height=2, borderwidth=0, cursor="hand2", command=self.show_comp_screen)
-        self.btn_start.pack()
-        self.btn_start.bind("<Enter>", lambda e: self.btn_start.config(bg=ACCENT_HOVER))
-        self.btn_start.bind("<Leave>", lambda e: self.btn_start.config(bg=ACCENT))
+        # Header Tools bar
+        bar = tk.Frame(main, bg=SURF)
+        bar.pack(fill="x", pady=5)
         
-    def create_comparison_screen(self):
-        self.frame_comp = tk.Frame(self.container, bg=BACKGROUND)
+        tk.Button(bar, text="Upload URLs (.txt)", bg="#4CAF50", fg=TEXT, font=("Segoe UI", 10, "bold"), cursor="hand2", command=self.load_urls).pack(side="left", padx=10, pady=10)
+        self.lbl_status = ttk.Label(bar, text="0 URLs Staged | Ready", font=("Segoe UI", 10, "italic"), foreground=MUTED)
+        self.lbl_status.pack(side="left", padx=15)
         
-        top_bar = tk.Frame(self.frame_comp, bg=BACKGROUND)
-        top_bar.pack(fill="x", pady=15, padx=15)
-        
-        btn_back = tk.Button(top_bar, text="← Return", bg=SECONDARY, fg=TEXT, font=("Segoe UI", 10, "bold"), borderwidth=0, cursor="hand2", command=self.show_main_screen)
-        btn_back.pack(side="left")
-        
-        self.lbl_status = ttk.Label(top_bar, text="Status: Ready", font=("Segoe UI", 11, "italic"), foreground=MUTED_TEXT)
-        self.lbl_status.pack(side="right")
-        
-        control_bar = tk.Frame(self.frame_comp, bg=SURFACE)
-        control_bar.pack(fill="x", pady=10, padx=15)
-        
-        btn_fg = "#FFFFFF" if BACKGROUND != "#FFFFFF" else "#000000"
-        
-        self.btn_upload = tk.Button(control_bar, text="Upload Your URLs (.txt)", bg="#4CAF50", fg=btn_fg, font=("Segoe UI", 10, "bold"), borderwidth=0, cursor="hand2", command=self.upload_custom_urls)
-        self.btn_upload.pack(side="left", padx=10, pady=10)
-        
-        self.lbl_urls = ttk.Label(control_bar, text="0 URLs Staged")
-        self.lbl_urls.pack(side="left", padx=15)
-        
-        self.btn_reset = tk.Button(control_bar, text="Reset", bg=SECONDARY, fg=TEXT, font=("Segoe UI", 10, "bold"), borderwidth=0, width=8, cursor="hand2", command=self.reset_all)
-        self.btn_reset.pack(side="left", padx=5)
-
-        self.btn_run = tk.Button(control_bar, text="Start Extraction", bg=ACCENT, fg=ACCENT_TEXT, font=("Segoe UI", 11, "bold"), borderwidth=0, width=15, cursor="hand2", command=self.run_comparisons)
+        tk.Button(bar, text="Reset", bg=SURF, fg=TEXT, font=("Segoe UI", 10, "bold"), cursor="hand2", command=self.reset).pack(side="left")
+        self.btn_run = tk.Button(bar, text="Start Extraction", bg=ACCENT, fg="black", font=("Segoe UI", 11, "bold"), cursor="hand2", command=self.run)
         self.btn_run.pack(side="right", padx=10)
         
-        content_frame = ttk.Frame(self.frame_comp)
-        content_frame.pack(fill="both", expand=True, padx=15, pady=5)
-        content_frame.columnconfigure(0, weight=1)
-        content_frame.columnconfigure(1, weight=1)
+        # Dual System Quadrants
+        content = ttk.Frame(main)
+        content.pack(fill="both", expand=True, pady=5)
+        content.columnconfigure(0, weight=1)
+        content.columnconfigure(1, weight=1)
         
-        frame_seq = ttk.Labelframe(content_frame, text="Sequential Pipeline (Requests)")
-        frame_seq.grid(row=0, column=0, sticky="nsew", padx=10)
-        frame_par = ttk.Labelframe(content_frame, text="Parallel Pipeline (aiohttp + asyncio)")
-        frame_par.grid(row=0, column=1, sticky="nsew", padx=10)
+        self.seq_f = self.make_panel(content, "Sequential Pipeline (Requests)", 0)
+        self.par_f = self.make_panel(content, "Parallel Pipeline (aiohttp + asyncio)", 1)
         
-        self.seq_fields = self.build_four_fields(frame_seq)
-        self.seq_fields['prefix'] = 'seq'
-        self.par_fields = self.build_four_fields(frame_par)
-        self.par_fields['prefix'] = 'par'
+        # Benchmark Footer
+        sum_f = ttk.Labelframe(main, text="Data Performance")
+        sum_f.pack(fill="x", pady=10)
+        self.lbl_seq_bm = ttk.Label(sum_f, text="Sequential: -- | -- Req/s", font=("Segoe UI", 12))
+        self.lbl_seq_bm.pack(side="left", padx=15, pady=10)
+        self.lbl_par_bm = ttk.Label(sum_f, text="Parallel: -- | -- Req/s", font=("Segoe UI", 12))
+        self.lbl_par_bm.pack(side="left", padx=15)
+        self.lbl_diff = ttk.Label(sum_f, text="Speedup Multiplier: --", font=("Segoe UI", 12, "bold"), foreground=SUCC)
+        self.lbl_diff.pack(side="left", padx=30)
         
-        summary_frame = ttk.Labelframe(self.frame_comp, text="Data Performance Benchmark")
-        summary_frame.pack(fill="x", padx=25, pady=20)
+    def make_panel(self, parent, title, col):
+        f = ttk.Labelframe(parent, text=title)
+        f.grid(row=0, column=col, sticky="nsew", padx=10)
+        f.columnconfigure(0, weight=1); f.columnconfigure(1, weight=1)
         
-        self.lbl_speed_seq = ttk.Label(summary_frame, text="Sequential: -- | -- Req/s", font=("Segoe UI", 12))
-        self.lbl_speed_seq.pack(side="left", padx=15, pady=10)
-        self.lbl_speed_par = ttk.Label(summary_frame, text="Parallel: -- | -- Req/s", font=("Segoe UI", 12))
-        self.lbl_speed_par.pack(side="left", padx=15, pady=10)
-        self.lbl_diff = ttk.Label(summary_frame, text="Speedup Multiplier: --", font=("Segoe UI", 12, "bold"))
-        self.lbl_diff.pack(side="left", padx=30, pady=10)
+        prog = ttk.Progressbar(f, orient="horizontal", mode="determinate")
+        prog.grid(row=0, column=0, columnspan=2, sticky="ew", padx=10, pady=5)
+        lbl_c = ttk.Label(f, text="Ready", font=("Segoe UI", 9), foreground=CYAN)
+        lbl_c.grid(row=1, column=0, columnspan=2)
         
-    def build_four_fields(self, parent):
-        parent.columnconfigure(0, weight=1)
-        parent.columnconfigure(1, weight=1)
-        fields = {}
+        p = {"prog": prog, "c": lbl_c}
+        p["time"] = self._box(f, "Total Execution Time", 2, 0, SUCC)
         
-        prog_frame = tk.Frame(parent, bg=BACKGROUND)
-        prog_frame.grid(row=0, column=0, columnspan=2, sticky="ew", padx=10, pady=5)
+        sf = ttk.Labelframe(f, text="Success ✓ / Failed ✕")
+        sf.grid(row=2, column=1, sticky="nsew", padx=5, pady=5)
+        hf = tk.Frame(sf, bg=BG)
+        hf.pack(expand=True)
+        p["S"], p["F"] = ttk.Label(hf, text="0", font=("Segoe UI", 20, "bold"), foreground=SUCC), ttk.Label(hf, text="0", font=("Segoe UI", 20, "bold"), foreground=ERR)
+        p["S"].pack(side="left"); ttk.Label(hf, text=" / ", font=("Segoe UI", 20)).pack(side="left"); p["F"].pack(side="left")
         
-        prog = ttk.Progressbar(prog_frame, orient="horizontal", mode="determinate")
-        prog.pack(fill="x", expand=True)
-        fields["prog"] = prog
-        
-        fields["counter"] = ttk.Label(prog_frame, text="Ready", font=("Segoe UI", 9), foreground=CYAN)
-        fields["counter"].pack(pady=(2,0))
-        
-        f1 = ttk.Labelframe(parent, text="Total Execution Time")
-        f1.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
-        fields["time"] = ttk.Label(f1, text="0.0 sec", font=("Segoe UI", 20, "bold"), foreground=SUCCESS)
-        fields["time"].pack(expand=True, pady=10)
-        
-        f2 = ttk.Labelframe(parent, text="Success ✓ / Failed ✕")
-        f2.grid(row=1, column=1, sticky="nsew", padx=5, pady=5)
-        
-        f2_container = tk.Frame(f2, bg=BACKGROUND)
-        f2_container.pack(expand=True, pady=10)
-        
-        fields["success"] = ttk.Label(f2_container, text="0", font=("Segoe UI", 20, "bold"), foreground=SUCCESS)
-        fields["success"].pack(side="left")
-        ttk.Label(f2_container, text=" / ", font=("Segoe UI", 20, "bold")).pack(side="left")
-        fields["fail"] = ttk.Label(f2_container, text="0", font=("Segoe UI", 20, "bold"), foreground=ERROR)
-        fields["fail"].pack(side="left")
-        
-        f3 = ttk.Labelframe(parent, text="Total Dataset Word Count")
-        f3.grid(row=2, column=0, sticky="nsew", padx=5, pady=5)
-        fields["words"] = ttk.Label(f3, text="0", font=("Segoe UI", 20, "bold"), foreground=ACCENT)
-        fields["words"].pack(expand=True, pady=10)
-        
-        f4 = ttk.Labelframe(parent, text="Top Dataset Keywords (TF-IDF sim)")
-        f4.grid(row=2, column=1, sticky="nsew", padx=5, pady=5)
-        fields["common"] = tk.Text(f4, bg=SURFACE, fg=TEXT, borderwidth=0, font=("Consolas", 11), height=8)
-        fields["common"].pack(fill="both", expand=True, padx=10, pady=10)
-        return fields
+        p["w"] = self._box(f, "Total Dataset Word Count", 3, 0, ACCENT)
+        p["top"] = tk.Text(ttk.Labelframe(f, text="Top Dataset Keywords"), bg=SURF, fg=TEXT, height=7, borderwidth=0)
+        p["top"].master.grid(row=3, column=1, sticky="nsew", padx=5, pady=5)
+        p["top"].pack(fill="both", expand=True, padx=5, pady=5)
+        return p
 
-    def upload_custom_urls(self):
-        file_path = filedialog.askopenfilename(filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")])
-        if file_path:
-            with open(file_path, "r") as f:
-                self.urls = [line.strip() for line in f if line.strip().lower().startswith("http")]
-            self.lbl_urls.config(text=f"{len(self.urls)} Custom URLs Staged")
-            self.lbl_status.config(text=f"Status: Loaded custom list from {os.path.basename(file_path)}")
+    def _box(self, pr, txt, r, c, color):
+        fr = ttk.Labelframe(pr, text=txt)
+        fr.grid(row=r, column=c, sticky="nsew", padx=5, pady=5)
+        lbl = ttk.Label(fr, text="0.0 sec" if "Time" in txt else "0", font=("Segoe UI", 20, "bold"), foreground=color)
+        lbl.pack(expand=True, pady=10)
+        return lbl
 
-    def reset_all(self):
-        self.urls = []
-        self.lbl_urls.config(text="0 URLs Staged")
-        self.lbl_status.config(text="Status: Ready", foreground=MUTED_TEXT)
-        self.update_fields_blank(self.seq_fields)
-        self.update_fields_blank(self.par_fields)
-        self._set_progress(self.seq_fields["prog"], 0, 100)
-        self._set_progress(self.par_fields["prog"], 0, 100)
-        self.lbl_speed_seq.config(text="Sequential: -- | -- Req/s")
-        self.lbl_speed_par.config(text="Parallel: -- | -- Req/s")
+    def load_urls(self):
+        if path := filedialog.askopenfilename(filetypes=[("Text", "*.txt")]):
+            with open(path, "r") as f: self.urls = [r.strip() for r in f if r.strip().startswith("http")]
+            self.lbl_status.config(text=f"{len(self.urls)} URLs Staged | File: {os.path.basename(path)}")
+            
+    def reset(self):
+        self.urls, self.stop_flag = [], False
+        self.lbl_status.config(text="0 URLs Staged | Ready", foreground=MUTED)
+        self.load_res(self.seq_f, None); self.load_res(self.par_f, None)
+        self.lbl_seq_bm.config(text="Sequential: -- | -- Req/s")
+        self.lbl_par_bm.config(text="Parallel: -- | -- Req/s")
         self.lbl_diff.config(text="Speedup Multiplier: --")
-        self.seq_fields["counter"].config(text="Ready")
-        self.par_fields["counter"].config(text="Ready")
 
-    def run_comparisons(self):
-        if not self.urls:
-            messagebox.showwarning("No Data", "Please upload a .txt file containing URLs first.")
-            return
-        self.is_running = True
-        self.stop_flag = False
-        self.lbl_status.config(text="Status: Operating Sequential Web Extraction...")
-        self.btn_run.config(bg=SECONDARY, fg=MUTED_TEXT, state=tk.DISABLED)
-        self.update_fields_blank(self.seq_fields)
-        self.update_fields_blank(self.par_fields)
-        self._set_progress(self.seq_fields["prog"], 0, len(self.urls))
-        self._set_progress(self.par_fields["prog"], 0, len(self.urls))
-        t = threading.Thread(target=self._process_data)
-        t.daemon = True
-        t.start()
+    def load_res(self, p, res):
+        p["time"].config(text=f"{res.time_taken}s" if res else "0.0 sec")
+        p["S"].config(text=str(res.successful_urls) if res else "0")
+        p["F"].config(text=str(res.failed_urls) if res else "0")
+        p["w"].config(text=str(res.total_words) if res else "0")
+        p["top"].delete("1.0", tk.END)
+        if res: p["top"].insert(tk.END, "\n".join(f"{i+1}. {m}" for i, m in enumerate(res.top_global_words)))
+        else: p["prog"]["value"] = 0; p["c"].config(text="Ready")
 
-    def show_main_screen(self):
-        self.frame_comp.pack_forget()
-        self.frame_main.pack(fill="both", expand=True)
-    def show_comp_screen(self):
-        self.frame_main.pack_forget()
-        self.frame_comp.pack(fill="both", expand=True)
-    def _set_progress(self, prog_widget, current, total):
-        prog_widget["maximum"] = total
-        prog_widget["value"] = current
-    def update_fields_blank(self, field_dict):
-        field_dict["time"].config(text="0.0 sec")
-        field_dict["success"].config(text="0")
-        field_dict["fail"].config(text="0")
-        field_dict["words"].config(text="0")
-        field_dict["common"].delete("1.0", tk.END)
-    def update_fields(self, field_dict, res):
-        field_dict["time"].config(text=f"{res.time_taken} sec")
-        field_dict["success"].config(text=str(res.successful_urls))
-        field_dict["fail"].config(text=str(res.failed_urls))
-        field_dict["words"].config(text=str(res.total_words))
-        field_dict["common"].delete("1.0", tk.END)
-        for i, msg in enumerate(res.top_global_words):
-            field_dict["common"].insert(tk.END, f"{i+1}. {msg}\n")
+    def run(self):
+        if not self.urls: return messagebox.showwarning("No Data", "Upload URLs first.")
+        self.stop_flag, self.btn_run['state'] = False, tk.DISABLED
+        self.load_res(self.seq_f, None); self.load_res(self.par_f, None)
+        threading.Thread(target=self._proc, daemon=True).start()
 
-    def _process_data(self):
-        def check_cancel(): return self.stop_flag
-        
-        def seq_progress(current, total, current_url=""): 
-            self.root.after(0, lambda: self._set_progress(self.seq_fields["prog"], current, total))
-            if current_url:
-                display_url = current_url[:40] + "..." if len(current_url) > 40 else current_url
-                self.root.after(0, lambda: self.seq_fields["counter"].config(text=f"Processing {current}/{total}: {display_url}"))
-        
-        def par_progress(current, total, current_url=""): 
-            self.root.after(0, lambda: self._set_progress(self.par_fields["prog"], current, total))
-            if current_url:
-                display = f"Processing {current}/{total}: {current_url[:40]}..."
-                if "FAILED" in current_url:
-                    self.root.after(0, lambda: self.par_fields["counter"].config(text=display, foreground=ERROR))
-                else:
-                    self.root.after(0, lambda: self.par_fields["counter"].config(text=display, foreground=CYAN))
-        
+    def _upd_prog(self, p, c, t, url, is_err=False):
+        p["prog"]["maximum"], p["prog"]["value"] = t, c
+        if url: p["c"].config(text=f"Process {c}/{t}: {url[:38]}...", foreground=ERR if is_err else CYAN)
+
+    def _proc(self):
+        post = lambda fn: self.root.after(0, fn)
         try:
-            seq_res = SequentialEngine.run(self.urls, check_cancel=check_cancel, progress_cb=seq_progress)
-            self.root.after(0, lambda: self.update_fields(self.seq_fields, seq_res))
-            self.root.after(0, lambda: self.lbl_status.config(text="Status: Operating Parallel Web Extraction..."))
-            self.root.after(0, lambda: self.seq_fields["counter"].config(text="Sequential Complete.", foreground=SUCCESS))
+            post(lambda: self.lbl_status.config(text="Operating Sequential Tracker..."))
+            s_res = SequentialEngine.run(self.urls, lambda: self.stop_flag, lambda c, t, u="": post(lambda: self._upd_prog(self.seq_f, c, t, u)))
+            post(lambda: [self.load_res(self.seq_f, s_res), self.seq_f["c"].config(text="Sequential Complete.", foreground=SUCC)])
 
-            par_res = ParallelEngine.run(self.urls, check_cancel=check_cancel, progress_cb=par_progress)
-            self.root.after(0, lambda: self.update_fields(self.par_fields, par_res))
-            self.root.after(0, lambda: self.par_fields["counter"].config(text="Parallel Complete.", foreground=SUCCESS))
-            
-            speedup = "N/A"
-            if par_res.time_taken > 0: speedup = round(seq_res.time_taken / par_res.time_taken, 2)
-            
-            # Additional Depth Option: Throughput Tracking (TPS)
-            seq_tps = round(len(self.urls) / seq_res.time_taken, 2) if seq_res.time_taken > 0 else 0
-            par_tps = round(len(self.urls) / par_res.time_taken, 2) if par_res.time_taken > 0 else 0
-            
-            self.root.after(0, lambda: self.lbl_speed_seq.config(text=f"Sequential: {seq_res.time_taken}s | {seq_tps} Req/s"))
-            self.root.after(0, lambda: self.lbl_speed_par.config(text=f"Parallel: {par_res.time_taken}s | {par_tps} Req/s"))
-            self.root.after(0, lambda: self.lbl_diff.config(text=f"Speedup Multiplier: {speedup}x 🚀", foreground=SUCCESS))
-            self.root.after(0, lambda: self.lbl_status.config(text="Status: Global Scrape Complete!"))
-            self.root.after(0, lambda: self.btn_run.config(bg=ACCENT, fg=ACCENT_TEXT, state=tk.NORMAL))
+            post(lambda: self.lbl_status.config(text="Operating Parallel Burst Engine..."))
+            p_res = ParallelEngine.run(self.urls, lambda: self.stop_flag, lambda c, t, u="": post(lambda: self._upd_prog(self.par_f, c, t, u, "FAILED" in u.upper())))
+            post(lambda: [self.load_res(self.par_f, p_res), self.par_f["c"].config(text="Parallel Complete.", foreground=SUCC)])
+
+            if p_res.time_taken > 0:
+                s_tps = round(len(self.urls)/s_res.time_taken, 2) if s_res.time_taken else 0
+                p_tps = round(len(self.urls)/p_res.time_taken, 2)
+                post(lambda: [
+                    self.lbl_seq_bm.config(text=f"Sequential: {s_res.time_taken}s | {s_tps} Req/s"),
+                    self.lbl_par_bm.config(text=f"Parallel: {p_res.time_taken}s | {p_tps} Req/s"),
+                    self.lbl_diff.config(text=f"Speedup Multiplier: {round(s_res.time_taken/p_res.time_taken, 2)}x 🚀"),
+                    self.lbl_status.config(text="Global Scrape Complete! ✓")
+                ])
         except Exception as e:
-            self.root.after(0, lambda: self.lbl_status.config(text=f"Error! {e}", foreground=ERROR))
-            self.root.after(0, lambda: self.btn_run.config(bg=ACCENT, fg=ACCENT_TEXT, state=tk.NORMAL))
-            print(f"Error during extraction thread -> {e}")
+            post(lambda: self.lbl_status.config(text=f"Error: {e}"))
+        finally:
+            post(lambda: self.btn_run.config(state=tk.NORMAL))

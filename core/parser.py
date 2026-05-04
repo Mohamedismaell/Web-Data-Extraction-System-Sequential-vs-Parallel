@@ -30,15 +30,12 @@ def parse_html(url: str, html: str) -> ExtractedData:
     paragraphs = soup.find_all('p')
     text = " ".join([p.get_text(separator=" ", strip=True) for p in paragraphs])
     
-    # Normalize text: lowercase and extract alphabetic words only
     words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
     
-    # Filter stopwords for advanced intelligence
     filtered_words = [w for w in words if w not in STOP_WORDS]
     
     word_count = len(words)
     
-    # Term Frequency representation for Page-Specific keywords
     c = Counter(filtered_words)
     top_words = [word for word, freq in c.most_common(5)]
     
@@ -56,7 +53,6 @@ def parse_html(url: str, html: str) -> ExtractedData:
 def compile_results(results: List[ExtractedData], time_taken: float, failed_urls: int) -> SystemResult:
     total_words = sum(r.word_count for r in results)
     
-    # Aggregate page-specific keywords to find the true global dataset identifiers
     all_top = list(itertools.chain.from_iterable(r.top_words for r in results))
     c = Counter(all_top)
     top_global = [w for w, f in c.most_common(5)]
