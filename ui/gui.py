@@ -72,16 +72,10 @@ class App:
         control_bar = tk.Frame(self.frame_comp, bg=SURFACE)
         control_bar.pack(fill="x", pady=10, padx=15)
         
-        # Fixed the local function scope bug by moving the color logic to a simple variable
         btn_fg = "#FFFFFF" if BACKGROUND != "#FFFFFF" else "#000000"
         
         self.btn_upload = tk.Button(control_bar, text="Upload Your URLs (.txt)", bg="#4CAF50", fg=btn_fg, font=("Segoe UI", 10, "bold"), borderwidth=0, cursor="hand2", command=self.upload_custom_urls)
         self.btn_upload.pack(side="left", padx=10, pady=10)
-
-        self.btn_test10 = tk.Button(control_bar, text="Wiki-10", bg=SECONDARY, fg=TEXT, borderwidth=0, font=("Segoe UI", 9, "bold"), cursor="hand2", command=lambda: self.load_preset("test_10.txt"))
-        self.btn_test10.pack(side="left", padx=2)
-        self.btn_test50 = tk.Button(control_bar, text="Wiki-50", bg=SECONDARY, fg=TEXT, borderwidth=0, font=("Segoe UI", 9, "bold"), cursor="hand2", command=lambda: self.load_preset("test_50.txt"))
-        self.btn_test50.pack(side="left", padx=2)
         
         self.lbl_urls = ttk.Label(control_bar, text="0 URLs Staged")
         self.lbl_urls.pack(side="left", padx=15)
@@ -103,14 +97,16 @@ class App:
         frame_par.grid(row=0, column=1, sticky="nsew", padx=10)
         
         self.seq_fields = self.build_four_fields(frame_seq)
+        self.seq_fields['prefix'] = 'seq'
         self.par_fields = self.build_four_fields(frame_par)
+        self.par_fields['prefix'] = 'par'
         
         summary_frame = ttk.Labelframe(self.frame_comp, text="Data Performance Benchmark")
         summary_frame.pack(fill="x", padx=25, pady=20)
         
-        self.lbl_speed_seq = ttk.Label(summary_frame, text="Sequential Time: --", font=("Segoe UI", 12))
+        self.lbl_speed_seq = ttk.Label(summary_frame, text="Sequential: -- | -- Req/s", font=("Segoe UI", 12))
         self.lbl_speed_seq.pack(side="left", padx=15, pady=10)
-        self.lbl_speed_par = ttk.Label(summary_frame, text="Parallel Time: --", font=("Segoe UI", 12))
+        self.lbl_speed_par = ttk.Label(summary_frame, text="Parallel: -- | -- Req/s", font=("Segoe UI", 12))
         self.lbl_speed_par.pack(side="left", padx=15, pady=10)
         self.lbl_diff = ttk.Label(summary_frame, text="Speedup Multiplier: --", font=("Segoe UI", 12, "bold"))
         self.lbl_diff.pack(side="left", padx=30, pady=10)
@@ -119,26 +115,40 @@ class App:
         parent.columnconfigure(0, weight=1)
         parent.columnconfigure(1, weight=1)
         fields = {}
-        prog = ttk.Progressbar(parent, orient="horizontal", mode="determinate")
-        prog.grid(row=0, column=0, columnspan=2, sticky="ew", padx=10, pady=10)
+        
+        prog_frame = tk.Frame(parent, bg=BACKGROUND)
+        prog_frame.grid(row=0, column=0, columnspan=2, sticky="ew", padx=10, pady=5)
+        
+        prog = ttk.Progressbar(prog_frame, orient="horizontal", mode="determinate")
+        prog.pack(fill="x", expand=True)
         fields["prog"] = prog
+        
+        fields["counter"] = ttk.Label(prog_frame, text="Ready", font=("Segoe UI", 9), foreground=CYAN)
+        fields["counter"].pack(pady=(2,0))
         
         f1 = ttk.Labelframe(parent, text="Total Execution Time")
         f1.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
         fields["time"] = ttk.Label(f1, text="0.0 sec", font=("Segoe UI", 20, "bold"), foreground=SUCCESS)
         fields["time"].pack(expand=True, pady=10)
         
-        f2 = ttk.Labelframe(parent, text="Extraction Success / Failed")
+        f2 = ttk.Labelframe(parent, text="Success ✓ / Failed ✕")
         f2.grid(row=1, column=1, sticky="nsew", padx=5, pady=5)
-        fields["count"] = ttk.Label(f2, text="0 / 0", font=("Segoe UI", 20, "bold"), foreground=CYAN)
-        fields["count"].pack(expand=True, pady=10)
+        
+        f2_container = tk.Frame(f2, bg=BACKGROUND)
+        f2_container.pack(expand=True, pady=10)
+        
+        fields["success"] = ttk.Label(f2_container, text="0", font=("Segoe UI", 20, "bold"), foreground=SUCCESS)
+        fields["success"].pack(side="left")
+        ttk.Label(f2_container, text=" / ", font=("Segoe UI", 20, "bold")).pack(side="left")
+        fields["fail"] = ttk.Label(f2_container, text="0", font=("Segoe UI", 20, "bold"), foreground=ERROR)
+        fields["fail"].pack(side="left")
         
         f3 = ttk.Labelframe(parent, text="Total Dataset Word Count")
         f3.grid(row=2, column=0, sticky="nsew", padx=5, pady=5)
         fields["words"] = ttk.Label(f3, text="0", font=("Segoe UI", 20, "bold"), foreground=ACCENT)
         fields["words"].pack(expand=True, pady=10)
         
-        f4 = ttk.Labelframe(parent, text="Top Global Keywords")
+        f4 = ttk.Labelframe(parent, text="Top Dataset Keywords (TF-IDF sim)")
         f4.grid(row=2, column=1, sticky="nsew", padx=5, pady=5)
         fields["common"] = tk.Text(f4, bg=SURFACE, fg=TEXT, borderwidth=0, font=("Consolas", 11), height=8)
         fields["common"].pack(fill="both", expand=True, padx=10, pady=10)
@@ -148,17 +158,9 @@ class App:
         file_path = filedialog.askopenfilename(filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")])
         if file_path:
             with open(file_path, "r") as f:
-                self.urls = [line.strip() for line in f if line.strip().startswith("http")]
+                self.urls = [line.strip() for line in f if line.strip().lower().startswith("http")]
             self.lbl_urls.config(text=f"{len(self.urls)} Custom URLs Staged")
             self.lbl_status.config(text=f"Status: Loaded custom list from {os.path.basename(file_path)}")
-
-    def load_preset(self, filename):
-        if not os.path.exists(filename):
-            messagebox.showerror("Error", f"Could not find {filename}. Run generate_urls.py first.")
-            return
-        with open(filename, "r") as f:
-            self.urls = [line.strip() for line in f if line.strip()]
-        self.lbl_urls.config(text=f"{len(self.urls)} Wiki URLs Staged")
 
     def reset_all(self):
         self.urls = []
@@ -168,13 +170,15 @@ class App:
         self.update_fields_blank(self.par_fields)
         self._set_progress(self.seq_fields["prog"], 0, 100)
         self._set_progress(self.par_fields["prog"], 0, 100)
-        self.lbl_speed_seq.config(text="Sequential Time: --")
-        self.lbl_speed_par.config(text="Parallel Time: --")
+        self.lbl_speed_seq.config(text="Sequential: -- | -- Req/s")
+        self.lbl_speed_par.config(text="Parallel: -- | -- Req/s")
         self.lbl_diff.config(text="Speedup Multiplier: --")
+        self.seq_fields["counter"].config(text="Ready")
+        self.par_fields["counter"].config(text="Ready")
 
     def run_comparisons(self):
         if not self.urls:
-            messagebox.showwarning("No Data", "Please load or upload URLs first.")
+            messagebox.showwarning("No Data", "Please upload a .txt file containing URLs first.")
             return
         self.is_running = True
         self.stop_flag = False
@@ -199,12 +203,14 @@ class App:
         prog_widget["value"] = current
     def update_fields_blank(self, field_dict):
         field_dict["time"].config(text="0.0 sec")
-        field_dict["count"].config(text="0 / 0")
+        field_dict["success"].config(text="0")
+        field_dict["fail"].config(text="0")
         field_dict["words"].config(text="0")
         field_dict["common"].delete("1.0", tk.END)
     def update_fields(self, field_dict, res):
         field_dict["time"].config(text=f"{res.time_taken} sec")
-        field_dict["count"].config(text=f"{res.successful_urls} / {res.failed_urls}")
+        field_dict["success"].config(text=str(res.successful_urls))
+        field_dict["fail"].config(text=str(res.failed_urls))
         field_dict["words"].config(text=str(res.total_words))
         field_dict["common"].delete("1.0", tk.END)
         for i, msg in enumerate(res.top_global_words):
@@ -212,18 +218,41 @@ class App:
 
     def _process_data(self):
         def check_cancel(): return self.stop_flag
-        def seq_progress(current, total): self.root.after(0, lambda: self._set_progress(self.seq_fields["prog"], current, total))
-        def par_progress(current, total): self.root.after(0, lambda: self._set_progress(self.par_fields["prog"], current, total))
+        
+        def seq_progress(current, total, current_url=""): 
+            self.root.after(0, lambda: self._set_progress(self.seq_fields["prog"], current, total))
+            if current_url:
+                display_url = current_url[:40] + "..." if len(current_url) > 40 else current_url
+                self.root.after(0, lambda: self.seq_fields["counter"].config(text=f"Processing {current}/{total}: {display_url}"))
+        
+        def par_progress(current, total, current_url=""): 
+            self.root.after(0, lambda: self._set_progress(self.par_fields["prog"], current, total))
+            if current_url:
+                display = f"Processing {current}/{total}: {current_url[:40]}..."
+                if "FAILED" in current_url:
+                    self.root.after(0, lambda: self.par_fields["counter"].config(text=display, foreground=ERROR))
+                else:
+                    self.root.after(0, lambda: self.par_fields["counter"].config(text=display, foreground=CYAN))
+        
         try:
             seq_res = SequentialEngine.run(self.urls, check_cancel=check_cancel, progress_cb=seq_progress)
             self.root.after(0, lambda: self.update_fields(self.seq_fields, seq_res))
             self.root.after(0, lambda: self.lbl_status.config(text="Status: Operating Parallel Web Extraction..."))
+            self.root.after(0, lambda: self.seq_fields["counter"].config(text="Sequential Complete.", foreground=SUCCESS))
+
             par_res = ParallelEngine.run(self.urls, check_cancel=check_cancel, progress_cb=par_progress)
             self.root.after(0, lambda: self.update_fields(self.par_fields, par_res))
+            self.root.after(0, lambda: self.par_fields["counter"].config(text="Parallel Complete.", foreground=SUCCESS))
+            
             speedup = "N/A"
             if par_res.time_taken > 0: speedup = round(seq_res.time_taken / par_res.time_taken, 2)
-            self.root.after(0, lambda: self.lbl_speed_seq.config(text=f"Sequential Time: {seq_res.time_taken} s"))
-            self.root.after(0, lambda: self.lbl_speed_par.config(text=f"Parallel Time: {par_res.time_taken} s"))
+            
+            # Additional Depth Option: Throughput Tracking (TPS)
+            seq_tps = round(len(self.urls) / seq_res.time_taken, 2) if seq_res.time_taken > 0 else 0
+            par_tps = round(len(self.urls) / par_res.time_taken, 2) if par_res.time_taken > 0 else 0
+            
+            self.root.after(0, lambda: self.lbl_speed_seq.config(text=f"Sequential: {seq_res.time_taken}s | {seq_tps} Req/s"))
+            self.root.after(0, lambda: self.lbl_speed_par.config(text=f"Parallel: {par_res.time_taken}s | {par_tps} Req/s"))
             self.root.after(0, lambda: self.lbl_diff.config(text=f"Speedup Multiplier: {speedup}x 🚀", foreground=SUCCESS))
             self.root.after(0, lambda: self.lbl_status.config(text="Status: Global Scrape Complete!"))
             self.root.after(0, lambda: self.btn_run.config(bg=ACCENT, fg=ACCENT_TEXT, state=tk.NORMAL))

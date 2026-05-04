@@ -9,7 +9,6 @@ import json
 class ParallelEngine:
     @staticmethod
     def run(urls, check_cancel=None, progress_cb=None) -> SystemResult:
-        """Entry wrapper linking the Tkinter Thread securely into the asyncio event loop."""
         try:
             loop = asyncio.get_event_loop()
         except RuntimeError:
@@ -25,40 +24,38 @@ class ParallelEngine:
         failed = 0
         total = len(urls)
         
-        # Rate Limiting via asyncio.Semaphore (Max 15 concurrent web connections to prevent DOS tracking)
-        sem = asyncio.Semaphore(15) 
+        # Rate Limiting via asyncio.Semaphore
+        sem = asyncio.Semaphore(10) # Lowered to 10 to drastically reduce connection dropping / timeouts
         completed = [0]
         
         async def fetch(url, session):
             if check_cancel and check_cancel(): return None
             
             async with sem:
-                attempts = 3
+                attempts = 4 # Incremented retry attempts
                 for attempt in range(attempts):
                     if check_cancel and check_cancel(): return None
                     try:
-                        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-                        async with session.get(url, headers=headers, timeout=10) as response:
+                        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+                        # Increased connection timeout securely
+                        async with session.get(url, headers=headers, timeout=12) as response:
                             response.raise_for_status()
                             html = await response.text()
                             
-                            # Parse extraction payload seamlessly in memory
                             data = parse_html(url, html)
                             
                             completed[0] += 1
-                            if progress_cb: progress_cb(completed[0], total)
-                            print(f"[Parallel] Successfully Scraped -> {url}")
+                            if progress_cb: progress_cb(completed[0], total, url)
                             return data
                     except Exception as e:
                         if attempt == attempts - 1:
                             logging.error(f"[Parallel] Failed {url}: {e}")
                             completed[0] += 1
-                            if progress_cb: progress_cb(completed[0], total)
-                            print(f"[Parallel] ERROR Scraped -> {url}")
+                            if progress_cb: progress_cb(completed[0], total, f"FAILED: {url}")
                             return "FAIL"
-                        await asyncio.sleep(1) # Asynchronous linear backoff limit
+                        # Exponential backoff for parallel traffic jams
+                        await asyncio.sleep(1.5 * (attempt + 1)) 
         
-        # Open parallel high-speed asynchronous connection pools utilizing aiohttp
         async with aiohttp.ClientSession() as session:
             tasks = [fetch(url, session) for url in urls]
             outputs = await asyncio.gather(*tasks)
